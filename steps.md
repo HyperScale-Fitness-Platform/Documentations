@@ -1,4 +1,4 @@
-# Local Environment & Daily Workflow Guide
+# Gym Platform — Local Environment & Daily Workflow Guide
 
 Purpose of this document: get every teammate from "empty laptop" to "actively
 building a service that talks to the others through Kafka" — nothing more.
@@ -360,6 +360,76 @@ kind delete cluster --name gym-dev
 Just remember you'll redo Part 2 (steps 2.1–2.4) tomorrow if you do this —
 some teams instead just leave it running for weeks at a time and only
 recreate it when something breaks.
+
+---
+
+## PART 5.5 — Do I need to run the other service too?
+
+Short answer: **only when you're testing the actual handshake between two
+services.** Most of the day, you only run your own service.
+
+### Working on your own service only (the common case)
+
+You don't need the other real service running. Fake its side using the
+manual console consumer/producer instead — much faster iteration loop:
+
+```bash
+# if you're testing that YOUR service publishes correctly:
+kubectl -n kafka exec -it gym-kafka-dev-kafka-0 -- bin/kafka-console-consumer.sh \
+  --bootstrap-server localhost:9092 --topic session.booked --from-beginning
+# then trigger your endpoint and watch the JSON show up here
+
+# if you're testing that YOUR service consumes correctly:
+kubectl -n kafka exec -it gym-kafka-dev-kafka-0 -- bin/kafka-console-producer.sh \
+  --broker-list localhost:9092 --topic payment.succeeded
+# then paste in a fake JSON payload matching the schema in gym-platform-docs
+# and confirm your service reacts to it
+```
+
+### Testing the real integration between two services
+
+When you specifically need to confirm "does gym-operations-service publishing
+an event actually get picked up and handled correctly by gym-commerce-service"
+— you need **both repos cloned, pulled, and running at the same time**, each
+in its own terminal tab, both pointed at the same local Kafka:
+
+```bash
+# tab 1 — Kafka port-forward, stays open the whole time
+kubectl -n kafka port-forward svc/gym-kafka-dev-kafka-bootstrap 9092:9092
+
+# tab 2 — the producer side
+cd gym-operations-service
+git pull
+npm run dev
+
+# tab 3 — the consumer side
+cd gym-commerce-service
+git pull
+npm run dev
+```
+
+Then in a 4th tab, trigger the flow for real:
+
+```bash
+curl -X POST http://localhost:<operations-port>/bookings \
+  -H "Content-Type: application/json" \
+  -d '{"customerId": "abc123", "trainerId": "xyz789", "price": 500}'
+```
+
+If it's wired correctly: tab 2 logs the event being published, and within a
+second tab 3 logs it being received and handled — without you ever calling
+`gym-commerce-service` directly.
+
+### Team convention
+
+Reserve full multi-service runs for:
+- Right before opening a PR that touches a cross-service event contract
+- A short, dedicated integration-testing session (a couple of times a week),
+  ideally with one person per service so you're not juggling several
+  terminals and codebases solo
+
+Keep everyday work to just your own service + the manual console trick — it's
+faster and doesn't require you to keep every other repo up to date locally.
 
 ---
 
