@@ -1,0 +1,537 @@
+{
+  "info": {
+    "name": "Gym Management System - API",
+    "description": "Endpoint collection derived from the team's microservices architecture and DB/ERD docs. All requests go through the API Gateway unless noted in the Internal folder. This is a starter scaffold - descriptions on each request flag what's confirmed vs. still open, to be filled in as each service gets built.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8080/api" },
+    { "key": "token", "value": "" },
+    { "key": "customer_id", "value": "" },
+    { "key": "trainer_id", "value": "" },
+    { "key": "membership_base_url", "value": "http://membership-service.internal:3000" },
+    { "key": "booking_base_url", "value": "http://booking-service.internal:3000" },
+    { "key": "service_token", "value": "" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "Auth Service",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "description": "Creates a new user in USERS (Auth Service, Postgres). Fields match the ERD: email, password_hash (hashed server-side, not the raw password), role, phone.\n\nTO BE ADDED LATER: password strength rules, whether email verification is required before login, exact validation error format, and how 'role' gets set (self-selected at signup vs. assigned by admin for trainer accounts).",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"customer1@example.com\",\n  \"password\": \"SecurePass123!\",\n  \"role\": \"customer\",\n  \"phone\": \"+201234567890\"\n}" },
+            "url": { "raw": "{{base_url}}/auth/register", "host": ["{{base_url}}"], "path": ["auth", "register"] }
+          }
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "description": "Validates credentials against USERS and returns a JWT for the client to use as {{token}} on all subsequent client-facing requests.\n\nTO BE ADDED LATER: token expiry duration, response shape (does it return the user object alongside the token?), and lockout behavior after repeated failed attempts.",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"customer1@example.com\",\n  \"password\": \"SecurePass123!\"\n}" },
+            "url": { "raw": "{{base_url}}/auth/login", "host": ["{{base_url}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "description": "Returns the authenticated user's own USERS record based on the JWT in the Authorization header.\n\nTO BE ADDED LATER: whether this also merges in profile data from User Profile Service, or stays Auth-only and the frontend calls both separately.",
+            "url": { "raw": "{{base_url}}/auth/me", "host": ["{{base_url}}"], "path": ["auth", "me"] }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "description": "Exchanges a valid refresh token for a new access token, so the client doesn't have to re-login when the JWT expires.\n\nTO BE ADDED LATER: whole refresh-token flow is undecided - is it a separate long-lived token issued at login, a cookie, or is this endpoint even in scope for phase 1?",
+            "url": { "raw": "{{base_url}}/auth/refresh-token", "host": ["{{base_url}}"], "path": ["auth", "refresh-token"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "User Profile Service",
+      "item": [
+        {
+          "name": "Get Customer Profile",
+          "request": {
+            "method": "GET",
+            "description": "Returns a CUSTOMER_PROFILES record by id (Postgres, User Profile Service).\n\nTO BE ADDED LATER: confirm whether {{customer_id}} here is the profile id or the user_id FK - the ERD has both, and callers need to know which one this path expects.",
+            "url": { "raw": "{{base_url}}/profiles/customers/{{customer_id}}", "host": ["{{base_url}}"], "path": ["profiles", "customers", "{{customer_id}}"] }
+          }
+        },
+        {
+          "name": "Update Customer Profile",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "description": "Updates a customer's own profile fields (full_name, phone, date_of_birth, gender, photo_url per CUSTOMER_PROFILES).\n\nTO BE ADDED LATER: how photo_url gets populated - is the image uploaded to S3/MinIO via this same request, or is there a separate upload endpoint that returns a URL to pass in here?",
+            "body": { "mode": "raw", "raw": "{\n  \"full_name\": \"Ibrahim Mostafa\",\n  \"phone\": \"+201234567890\",\n  \"date_of_birth\": \"1999-05-10\",\n  \"gender\": \"male\",\n  \"photo_url\": \"https://cdn.example.com/photos/customer1.jpg\"\n}" },
+            "url": { "raw": "{{base_url}}/profiles/customers/{{customer_id}}", "host": ["{{base_url}}"], "path": ["profiles", "customers", "{{customer_id}}"] }
+          }
+        },
+        {
+          "name": "Get Trainer Profile",
+          "request": {
+            "method": "GET",
+            "description": "Returns a TRAINER_PROFILES record by id, including bio and specialty.\n\nTO BE ADDED LATER: whether this response also embeds the trainer's CERTIFICATIONS list, or if that needs a separate call.",
+            "url": { "raw": "{{base_url}}/profiles/trainers/{{trainer_id}}", "host": ["{{base_url}}"], "path": ["profiles", "trainers", "{{trainer_id}}"] }
+          }
+        },
+        {
+          "name": "Update Trainer Profile",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "description": "Updates a trainer's own profile fields (full_name, bio, specialty, gender, photo_url).\n\nTO BE ADDED LATER: same file-upload question as the customer profile update - direct S3 upload here vs. separate endpoint.",
+            "body": { "mode": "raw", "raw": "{\n  \"full_name\": \"Coach Ahmed\",\n  \"bio\": \"5 years of strength & conditioning coaching\",\n  \"specialty\": \"Strength Training\",\n  \"gender\": \"male\",\n  \"photo_url\": \"https://cdn.example.com/photos/trainer1.jpg\"\n}" },
+            "url": { "raw": "{{base_url}}/profiles/trainers/{{trainer_id}}", "host": ["{{base_url}}"], "path": ["profiles", "trainers", "{{trainer_id}}"] }
+          }
+        },
+        {
+          "name": "Upload Trainer Certification",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "description": "Adds a CERTIFICATIONS row for a trainer (title, issuer, file_url, issued_date).\n\nTO BE ADDED LATER: who's allowed to call this - trainer self-service, admin-only, or both? Also whether uploaded certs need admin approval before showing publicly on the trainer's profile.",
+            "body": { "mode": "raw", "raw": "{\n  \"title\": \"Certified Personal Trainer (CPT)\",\n  \"issuer\": \"NASM\",\n  \"file_url\": \"https://cdn.example.com/certs/trainer1_cpt.pdf\",\n  \"issued_date\": \"2023-01-15\"\n}" },
+            "url": { "raw": "{{base_url}}/profiles/trainers/{{trainer_id}}/certifications", "host": ["{{base_url}}"], "path": ["profiles", "trainers", "{{trainer_id}}", "certifications"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Membership Service",
+      "item": [
+        {
+          "name": "List Plans",
+          "request": {
+            "method": "GET",
+            "description": "Returns all PLANS (name, sessions/freeze/inbody included, duration, price). Public-ish catalog data, likely doesn't need auth to browse.\n\nTO BE ADDED LATER: pagination, and whether inactive/retired plans are filtered out or included with a flag.",
+            "url": { "raw": "{{base_url}}/plans", "host": ["{{base_url}}"], "path": ["plans"] }
+          }
+        },
+        {
+          "name": "Create Plan (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "description": "Admin-only: creates a new PLANS template.\n\nTO BE ADDED LATER: admin-role enforcement details (how the Gateway/middleware knows this caller is an admin), and whether editing an existing plan is a separate PUT endpoint not yet listed here.",
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Gold\",\n  \"pt_sessions_included\": 8,\n  \"freeze_days_included\": 7,\n  \"inbody_count_included\": 2,\n  \"duration_days\": 30,\n  \"price\": 1200.00\n}" },
+            "url": { "raw": "{{base_url}}/plans", "host": ["{{base_url}}"], "path": ["plans"] }
+          }
+        },
+        {
+          "name": "Subscribe to Plan",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "description": "Creates a MEMBERSHIPS row, copying pt_sessions_left/freeze_days_left/inbody_left from the plan's included values at signup time (frozen snapshot, per the docs - later plan edits shouldn't retroactively change this customer's counts).\n\nTO BE ADDED LATER: whether this endpoint also requires proof of payment first, or if it's called after Payment Service confirms via the PaymentSucceeded event - this is one of the saga flow's open questions.",
+            "body": { "mode": "raw", "raw": "{\n  \"customer_id\": \"{{customer_id}}\",\n  \"plan_id\": \"<plan_uuid>\"\n}" },
+            "url": { "raw": "{{base_url}}/memberships", "host": ["{{base_url}}"], "path": ["memberships"] }
+          }
+        },
+        {
+          "name": "Get Customer Membership",
+          "request": {
+            "method": "GET",
+            "description": "Returns the customer's current MEMBERSHIPS row - status, dates, and remaining benefit counts.\n\nTO BE ADDED LATER: behavior if a customer has no active membership (404 vs. empty object), and whether membership history (past/expired ones) is available here or needs a separate endpoint.",
+            "url": { "raw": "{{base_url}}/memberships/customer/{{customer_id}}", "host": ["{{base_url}}"], "path": ["memberships", "customer", "{{customer_id}}"] }
+          }
+        },
+        {
+          "name": "Freeze Membership",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "description": "Deducts from freeze_days_left and presumably extends end_date accordingly.\n\nTO BE ADDED LATER: whole freeze mechanic is still open - does it take effect immediately or does the customer pick future start/end dates for the freeze? Not detailed in the architecture docs yet.",
+            "body": { "mode": "raw", "raw": "{\n  \"freeze_days\": 3\n}" },
+            "url": { "raw": "{{base_url}}/memberships/<membership_id>/freeze", "host": ["{{base_url}}"], "path": ["memberships", "<membership_id>", "freeze"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Booking Service",
+      "item": [
+        {
+          "name": "List Classes",
+          "request": {
+            "method": "GET",
+            "description": "Returns CLASSES (name, type, capacity) - the catalog of class types, not specific time slots.\n\nTO BE ADDED LATER: filtering by type, and whether this should be combined with CLASS_SESSIONS in one call so the frontend gets both the class and its upcoming times together.",
+            "url": { "raw": "{{base_url}}/classes", "host": ["{{base_url}}"], "path": ["classes"] }
+          }
+        },
+        {
+          "name": "List Trainer Slots",
+          "request": {
+            "method": "GET",
+            "description": "Returns TRAINER_SLOTS filtered by trainer and date - the open time windows a customer can book a PT session into.\n\nTO BE ADDED LATER: exact query param set (date range vs. single date), and whether already-booked slots are excluded server-side or returned with a status field for the frontend to filter.",
+            "url": { "raw": "{{base_url}}/trainer-slots?trainer_id={{trainer_id}}&date=2026-07-05", "host": ["{{base_url}}"], "path": ["trainer-slots"], "query": [ { "key": "trainer_id", "value": "{{trainer_id}}" }, { "key": "date", "value": "2026-07-05" } ] }
+          }
+        },
+        {
+          "name": "Create Booking",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "description": "Creates a BOOKINGS row as pending, after an internal sync check against Membership Service for available sessions (see Internal folder). Per the saga flow, this likely starts in a pending_payment-style status and only becomes confirmed once PaymentSucceeded fires.\n\nTO BE ADDED LATER: exact status values this can start/end in, and what the response looks like while payment is still pending - the client needs to know how to react (poll? websocket? notification?).",
+            "body": { "mode": "raw", "raw": "{\n  \"customer_id\": \"{{customer_id}}\",\n  \"trainer_slot_id\": \"<slot_uuid>\",\n  \"type\": \"pt_session\"\n}" },
+            "url": { "raw": "{{base_url}}/bookings", "host": ["{{base_url}}"], "path": ["bookings"] }
+          }
+        },
+        {
+          "name": "Cancel Booking",
+          "request": {
+            "method": "PUT",
+            "description": "Cancels a booking and presumably releases the trainer slot back to open status.\n\nTO BE ADDED LATER: cancellation policy (cutoff window, whether PT sessions get refunded to the membership balance), and whether this also needs to trigger a compensating event if payment was already taken.",
+            "url": { "raw": "{{base_url}}/bookings/<booking_id>/cancel", "host": ["{{base_url}}"], "path": ["bookings", "<booking_id>", "cancel"] }
+          }
+        },
+        {
+          "name": "Reschedule Booking",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "description": "Moves a booking to a different trainer slot.\n\nTO BE ADDED LATER: whether this is atomic (old slot released + new slot claimed in one step) and how the status = 'open' race-condition check applies to the new slot, same as initial booking creation.",
+            "body": { "mode": "raw", "raw": "{\n  \"new_trainer_slot_id\": \"<new_slot_uuid>\"\n}" },
+            "url": { "raw": "{{base_url}}/bookings/<booking_id>/reschedule", "host": ["{{base_url}}"], "path": ["bookings", "<booking_id>", "reschedule"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payment Service",
+      "item": [
+        {
+          "name": "Create Payment",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "description": "Charges the customer via the payment gateway (Paymob/Stripe-style provider) - this call itself must be synchronous per the architecture doc, not eventually consistent. reference_type/reference_id link back to whatever's being paid for (booking, order, or membership).\n\nTO BE ADDED LATER: which provider is actually being integrated, the exact success/failure response shape from that provider, and how retries are handled if the gateway times out.",
+            "body": { "mode": "raw", "raw": "{\n  \"customer_id\": \"{{customer_id}}\",\n  \"reference_type\": \"booking\",\n  \"reference_id\": \"<booking_id>\",\n  \"amount\": 300.00,\n  \"provider\": \"paymob\"\n}" },
+            "url": { "raw": "{{base_url}}/payments", "host": ["{{base_url}}"], "path": ["payments"] }
+          }
+        },
+        {
+          "name": "Get Payment",
+          "request": {
+            "method": "GET",
+            "description": "Returns a single PAYMENTS record with its PAYMENT_ITEMS.\n\nTO BE ADDED LATER: nothing major open here - fairly standard read, will confirm once implemented.",
+            "url": { "raw": "{{base_url}}/payments/<payment_id>", "host": ["{{base_url}}"], "path": ["payments", "<payment_id>"] }
+          }
+        },
+        {
+          "name": "Get Customer Payment History",
+          "request": {
+            "method": "GET",
+            "description": "Returns all payments made by a customer.\n\nTO BE ADDED LATER: pagination and date-range filtering, and whether failed/pending payments show up here alongside successful ones.",
+            "url": { "raw": "{{base_url}}/payments/customer/{{customer_id}}", "host": ["{{base_url}}"], "path": ["payments", "customer", "{{customer_id}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Order-Inventory Service",
+      "item": [
+        {
+          "name": "List Products",
+          "request": {
+            "method": "GET",
+            "description": "Returns PRODUCTS catalog (name, category, price, stock_qty).\n\nTO BE ADDED LATER: filtering/search params, and whether out-of-stock products are hidden or shown as disabled.",
+            "url": { "raw": "{{base_url}}/products", "host": ["{{base_url}}"], "path": ["products"] }
+          }
+        },
+        {
+          "name": "Create Order",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "description": "Creates an ORDERS row plus ORDER_ITEMS, and per the architecture doc should reserve stock at this point (not just decrement it later).\n\nTO BE ADDED LATER: how stock reservation is implemented (a hold/timeout mechanism if payment never completes), and confirm the payment step happens sync or via event after this call, matching Flow C in the architecture doc.",
+            "body": { "mode": "raw", "raw": "{\n  \"customer_id\": \"{{customer_id}}\",\n  \"items\": [\n    { \"product_id\": \"<product_uuid>\", \"quantity\": 2 }\n  ]\n}" },
+            "url": { "raw": "{{base_url}}/orders", "host": ["{{base_url}}"], "path": ["orders"] }
+          }
+        },
+        {
+          "name": "Get Order",
+          "request": {
+            "method": "GET",
+            "description": "Returns an ORDERS record with its items.\n\nTO BE ADDED LATER: nothing major - standard read, will confirm response shape once implemented.",
+            "url": { "raw": "{{base_url}}/orders/<order_id>", "host": ["{{base_url}}"], "path": ["orders", "<order_id>"] }
+          }
+        },
+        {
+          "name": "Update Product Stock (Admin)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "description": "Admin-only: adjusts stock_qty directly.\n\nTO BE ADDED LATER: whether this is a set-to-value or an increment/decrement operation, and admin-role enforcement details.",
+            "body": { "mode": "raw", "raw": "{\n  \"stock_qty\": 50\n}" },
+            "url": { "raw": "{{base_url}}/products/<product_id>/stock", "host": ["{{base_url}}"], "path": ["products", "<product_id>", "stock"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Progress Tracking Service",
+      "item": [
+        {
+          "name": "Log Progress Entry",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "description": "Creates a PROGRESS_ENTRIES document (MongoDB) - weight, body fat %, InBody data, nutrition log for a given date.\n\nTO BE ADDED LATER: exact shape of inbody_data and nutrition_log objects (not detailed in the ERD beyond 'object'), and whether this publishes ProgressUpdated for AI/trainer review as mentioned in the architecture doc.",
+            "body": { "mode": "raw", "raw": "{\n  \"customer_id\": \"{{customer_id}}\",\n  \"entry_date\": \"2026-07-02\",\n  \"weight_kg\": 78.5,\n  \"body_fat_pct\": 18.2,\n  \"inbody_data\": {},\n  \"nutrition_log\": {}\n}" },
+            "url": { "raw": "{{base_url}}/progress-entries", "host": ["{{base_url}}"], "path": ["progress-entries"] }
+          }
+        },
+        {
+          "name": "Get Customer Progress History",
+          "request": {
+            "method": "GET",
+            "description": "Returns a customer's progress entries over time.\n\nTO BE ADDED LATER: date range filtering, and sort order (likely newest-first, needs confirming).",
+            "url": { "raw": "{{base_url}}/progress-entries/customer/{{customer_id}}", "host": ["{{base_url}}"], "path": ["progress-entries", "customer", "{{customer_id}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Trainer Plan Service",
+      "item": [
+        {
+          "name": "Create Trainer Plan",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"trainer_id\": \"{{trainer_id}}\",\n  \"customer_id\": \"{{customer_id}}\",\n  \"type\": \"combined\",\n  \"created_by\": \"trainer\",\n  \"workout_days\": {},\n  \"nutrition_targets\": {}\n}" },
+            "description": "Creates a TRAINER_PLANS document. created_by can be 'trainer', 'ai', or 'admin' per the ERD, and status starts somewhere in the pending_customer_review -> pending_trainer_review -> active/rejected chain depending on who created it.\n\nTO BE ADDED LATER: exact shape of workout_days and nutrition_targets objects, and which status this starts at for each created_by value (a trainer-created plan probably skips straight to active, an AI-created one starts at pending_customer_review).",
+            "url": { "raw": "{{base_url}}/trainer-plans", "host": ["{{base_url}}"], "path": ["trainer-plans"] }
+          }
+        },
+        {
+          "name": "Update Plan Status",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "description": "Moves a plan through its status chain (e.g. customer approves -> pending_trainer_review, trainer accepts -> active).\n\nTO BE ADDED LATER: whether each transition is its own endpoint (approve/reject) instead of one generic status PUT - worth checking with whoever builds this, a generic status field is easy to misuse from the frontend.",
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"active\"\n}" },
+            "url": { "raw": "{{base_url}}/trainer-plans/<plan_id>/status", "host": ["{{base_url}}"], "path": ["trainer-plans", "<plan_id>", "status"] }
+          }
+        },
+        {
+          "name": "Get Customer's Plans",
+          "request": {
+            "method": "GET",
+            "description": "Returns a customer's trainer plans.\n\nTO BE ADDED LATER: whether this returns all plans regardless of status, or only active ones by default with a query param to include others.",
+            "url": { "raw": "{{base_url}}/trainer-plans/customer/{{customer_id}}", "host": ["{{base_url}}"], "path": ["trainer-plans", "customer", "{{customer_id}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Community-Chat Service",
+      "item": [
+        {
+          "name": "List Threads",
+          "request": {
+            "method": "GET",
+            "description": "Returns community THREADS.\n\nTO BE ADDED LATER: pagination, sort order, and whether reply counts are included inline or require a separate call.",
+            "url": { "raw": "{{base_url}}/threads", "host": ["{{base_url}}"], "path": ["threads"] }
+          }
+        },
+        {
+          "name": "Create Thread",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "description": "Creates a new THREADS document.\n\nTO BE ADDED LATER: moderation rules (can admin delete/hide threads?), and whether trainers vs customers see the same community space or separate ones.",
+            "body": { "mode": "raw", "raw": "{\n  \"author_id\": \"{{customer_id}}\",\n  \"title\": \"Best pre-workout meal?\",\n  \"body\": \"What do you all eat before an evening session?\"\n}" },
+            "url": { "raw": "{{base_url}}/threads", "host": ["{{base_url}}"], "path": ["threads"] }
+          }
+        },
+        {
+          "name": "Reply to Thread",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "description": "Creates a THREAD_REPLIES document linked to a thread.\n\nTO BE ADDED LATER: nested replies (reply to a reply) or flat only - the ERD only shows a flat thread_id FK, worth confirming that's intentional.",
+            "body": { "mode": "raw", "raw": "{\n  \"author_id\": \"{{customer_id}}\",\n  \"body\": \"Banana and black coffee works well for me.\"\n}" },
+            "url": { "raw": "{{base_url}}/threads/<thread_id>/replies", "host": ["{{base_url}}"], "path": ["threads", "<thread_id>", "replies"] }
+          }
+        },
+        {
+          "name": "Send Direct Message",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "description": "Creates a DIRECT_MESSAGES document. Also delivered over WebSocket per the architecture doc, so REST here is likely just for sending/history, not the real-time delivery path.\n\nTO BE ADDED LATER: how the WebSocket and REST paths relate - does this REST call also push over the socket, or does the frontend handle that separately?",
+            "body": { "mode": "raw", "raw": "{\n  \"sender_id\": \"{{customer_id}}\",\n  \"receiver_id\": \"{{trainer_id}}\",\n  \"text\": \"Can we move tomorrow's session to 6pm?\"\n}" },
+            "url": { "raw": "{{base_url}}/messages", "host": ["{{base_url}}"], "path": ["messages"] }
+          }
+        },
+        {
+          "name": "Get Conversation",
+          "request": {
+            "method": "GET",
+            "description": "Returns direct message history between two users. The docs note this needs an index on sender_id+receiver_id (or a computed conversation_id) to be efficient.\n\nTO BE ADDED LATER: pagination for long conversation histories, and confirm the URL shape (this assumes /messages/{userA}/{userB} but a query-param version is equally valid).",
+            "url": { "raw": "{{base_url}}/messages/{{customer_id}}/{{trainer_id}}", "host": ["{{base_url}}"], "path": ["messages", "{{customer_id}}", "{{trainer_id}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Occupancy Service",
+      "item": [
+        {
+          "name": "Check In",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "description": "Increments the live occupancy counter in Redis. Per the docs this may come from a check-in device rather than the app itself, over REST or MQTT.\n\nTO BE ADDED LATER: is this actually called by the customer's app, a physical gate device, or both? Changes who the caller/auth model is for this endpoint.",
+            "body": { "mode": "raw", "raw": "{\n  \"customer_id\": \"{{customer_id}}\"\n}" },
+            "url": { "raw": "{{base_url}}/occupancy/checkin", "host": ["{{base_url}}"], "path": ["occupancy", "checkin"] }
+          }
+        },
+        {
+          "name": "Check Out",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "description": "Decrements the live occupancy counter.\n\nTO BE ADDED LATER: same open question as check-in regarding caller/device, plus what happens if a checkout never arrives (auto-expire after N hours?).",
+            "body": { "mode": "raw", "raw": "{\n  \"customer_id\": \"{{customer_id}}\"\n}" },
+            "url": { "raw": "{{base_url}}/occupancy/checkout", "host": ["{{base_url}}"], "path": ["occupancy", "checkout"] }
+          }
+        },
+        {
+          "name": "Get Current Occupancy",
+          "request": {
+            "method": "GET",
+            "description": "Returns the current people-in-gym count. Per the docs the live version of this is pushed via WebSocket/pub-sub - this REST version is likely just a one-off snapshot read.\n\nTO BE ADDED LATER: confirm this REST endpoint is actually needed alongside the WebSocket stream, or if it's redundant.",
+            "url": { "raw": "{{base_url}}/occupancy/current", "host": ["{{base_url}}"], "path": ["occupancy", "current"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Announcement Service",
+      "item": [
+        {
+          "name": "List Announcements",
+          "request": {
+            "method": "GET",
+            "description": "Returns published ANNOUNCEMENTS.\n\nTO BE ADDED LATER: filtering by category, and whether unpublished/scheduled announcements are visible to admins here or through a separate admin-only endpoint.",
+            "url": { "raw": "{{base_url}}/announcements", "host": ["{{base_url}}"], "path": ["announcements"] }
+          }
+        },
+        {
+          "name": "Create Announcement (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "description": "Admin-only: creates an ANNOUNCEMENTS document, which should trigger AnnouncementCreated for Notification Service.\n\nTO BE ADDED LATER: whether published_at can be set in the future for scheduled announcements, or if this always publishes immediately.",
+            "body": { "mode": "raw", "raw": "{\n  \"admin_id\": \"<admin_uuid>\",\n  \"title\": \"New HIIT class starting Sunday\",\n  \"body\": \"Join our new HIIT class every Sunday at 7am.\",\n  \"category\": \"class\"\n}" },
+            "url": { "raw": "{{base_url}}/announcements", "host": ["{{base_url}}"], "path": ["announcements"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "AI Service",
+      "item": [
+        {
+          "name": "List AI Plans",
+          "request": {
+            "method": "GET",
+            "description": "Returns AI_PLANS - tiered subscription options with feature flags (video_analysis, custom_nutrition, etc).\n\nTO BE ADDED LATER: which database this service actually uses - the architecture doc says MongoDB, the ERD shows Postgres with AI_PLANS/AI_SUBSCRIPTIONS/AI_USAGE_LOG. This is a real inconsistency between the two docs your team should resolve before building against it.",
+            "url": { "raw": "{{base_url}}/ai-plans", "host": ["{{base_url}}"], "path": ["ai-plans"] }
+          }
+        },
+        {
+          "name": "Subscribe to AI Plan",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "description": "Creates an AI_SUBSCRIPTIONS row, copying interactions_left from the plan's credits_number (same frozen-snapshot pattern as Membership).\n\nTO BE ADDED LATER: same DB-choice question as above, plus whether payment is required before this call, matching the same open question as Membership subscription.",
+            "body": { "mode": "raw", "raw": "{\n  \"customer_id\": \"{{customer_id}}\",\n  \"ai_plan_id\": \"<ai_plan_uuid>\"\n}" },
+            "url": { "raw": "{{base_url}}/ai-subscriptions", "host": ["{{base_url}}"], "path": ["ai-subscriptions"] }
+          }
+        },
+        {
+          "name": "Generate Schedule",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "description": "Kicks off Flow B from the architecture doc: AI Service checks Booking Service internally for real trainer availability, then proposes a schedule back to the customer.\n\nTO BE ADDED LATER: response shape while the AI is 'thinking' (sync wait vs. async job the client polls), and how the proposed schedule maps to TRAINER_PLANS status once the customer approves it.",
+            "body": { "mode": "raw", "raw": "{\n  \"customer_id\": \"{{customer_id}}\",\n  \"free_days\": [\"Mon\", \"Wed\", \"Fri\"],\n  \"preferred_time\": \"evening\"\n}" },
+            "url": { "raw": "{{base_url}}/ai/generate-schedule", "host": ["{{base_url}}"], "path": ["ai", "generate-schedule"] }
+          }
+        },
+        {
+          "name": "AI Chat",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "description": "General AI chatbot interaction, deducts from interactions_left and logs to AI_USAGE_LOG.\n\nTO BE ADDED LATER: which external LLM API this calls, streaming vs. single response, and what happens when interactions_left hits zero.",
+            "body": { "mode": "raw", "raw": "{\n  \"customer_id\": \"{{customer_id}}\",\n  \"message\": \"What should I eat before a leg day workout?\"\n}" },
+            "url": { "raw": "{{base_url}}/ai/chat", "host": ["{{base_url}}"], "path": ["ai", "chat"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notification Service",
+      "item": [
+        {
+          "name": "Get User Notifications",
+          "request": {
+            "method": "GET",
+            "description": "Returns a user's notifications. Notification Service listens to nearly every event in the system per the architecture doc, so this is likely the largest fan-in consumer.\n\nTO BE ADDED LATER: whether this service is stateless (per the docs, 'MongoDB or none') - if notifications aren't persisted, this endpoint may not exist at all and delivery is push-only. Needs a decision before documenting further.",
+            "url": { "raw": "{{base_url}}/notifications/{{customer_id}}", "host": ["{{base_url}}"], "path": ["notifications", "{{customer_id}}"] }
+          }
+        },
+        {
+          "name": "Mark Notification as Read",
+          "request": {
+            "method": "PUT",
+            "description": "Marks a notification as read.\n\nTO BE ADDED LATER: same open question as above - depends on whether notifications are persisted at all.",
+            "url": { "raw": "{{base_url}}/notifications/<notification_id>/read", "host": ["{{base_url}}"], "path": ["notifications", "<notification_id>", "read"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Internal - Service to Service",
+      "description": "NOT reached through the API Gateway. These are direct service-to-service calls used inside sync flows described in the architecture doc (e.g. Booking checking Membership before confirming a paid session). Auth here is a service token (service_token variable), not a user JWT - do not reuse {{token}} here. Base URLs point at each service directly, not the gateway. Placeholder scaffold - fill in real paths/bodies once these are actually implemented.\n\nTO BE ADDED LATER (team-wide, still open as of now): whether internal auth ends up being a shared-secret token or something mesh-based - decision depends on whether EKS is a confirmed deployment target.",
+      "item": [
+        {
+          "name": "Booking -> Membership: Check Session Availability",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{service_token}}" }],
+            "description": "Called by Booking Service before confirming a PT session booking. Answers: does this customer have PT sessions left on their membership right now? Sync call - Booking cannot proceed without this answer.\n\nTO BE ADDED LATER: exact response shape (just a boolean, or the full remaining-benefits object), and timeout/fallback behavior if Membership Service doesn't respond in time.",
+            "url": { "raw": "{{membership_base_url}}/internal/memberships/{{customer_id}}/availability", "host": ["{{membership_base_url}}"], "path": ["internal", "memberships", "{{customer_id}}", "availability"] }
+          }
+        },
+        {
+          "name": "AI Service -> Booking: Check Trainer/Slot Availability",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{service_token}}" }],
+            "description": "Called by AI Service while generating a proposed schedule. Answers: is this trainer free at this time? Sync call - AI Service needs a real answer before it can propose a schedule to the customer.\n\nTO BE ADDED LATER: whether this checks a single time slot per call or accepts a batch of candidate times to reduce round trips during schedule generation.",
+            "url": { "raw": "{{booking_base_url}}/internal/trainer-slots/availability?trainer_id={{trainer_id}}&start_time=2026-07-06T18:00:00Z", "host": ["{{booking_base_url}}"], "path": ["internal", "trainer-slots", "availability"], "query": [ { "key": "trainer_id", "value": "{{trainer_id}}" }, { "key": "start_time", "value": "2026-07-06T18:00:00Z" } ] }
+          }
+        }
+      ]
+    }
+  ]
+}
