@@ -1,4 +1,4 @@
-# Gym Platform — Team Onboarding & Local Development Guide
+# Local Development Guide
 
 This is the single source of truth for getting the local development environment running and for how to build any service in this system. Read this before writing code in any `gym-*-service` repo.
 
