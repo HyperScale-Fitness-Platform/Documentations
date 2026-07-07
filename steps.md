@@ -1,8 +1,6 @@
 # Gym Platform — Team Onboarding & Local Development Guide
 
-This is the single source of truth for getting the local development environment
-running and for how to build any service in this system. Read this before writing
-code in any `gym-*-service` repo.
+This is the single source of truth for getting the local development environment running and for how to build any service in this system. Read this before writing code in any `gym-*-service` repo.
 
 ---
 
@@ -21,9 +19,7 @@ gym-commerce-service       # catalog + orders + payments
 gym-ai-service             # AI features + chatbot
 ```
 
-Every service repo follows the same internal layout (see §5). If you're starting a
-new service, use **"Use this template"** on `gym-service-template` rather than
-copy-pasting `gym-auth-service` by hand.
+Every service repo follows the same internal layout. If you're starting a new service, use **"Use this template"** on `gym-service-template`.
 
 ---
 
@@ -32,27 +28,72 @@ copy-pasting `gym-auth-service` by hand.
 Install once, per developer machine:
 
 ```bash
-# Docker (required by everything below)
-# https://docs.docker.com/get-docker/
+-----------------------DOCKER-----------------------
+# remove any old versions first
+sudo dnf remove -y docker docker-client docker-client-latest docker-common \
+  docker-latest docker-latest-logrotate docker-logrotate docker-engine
 
-# kind — local Kubernetes cluster running inside Docker
-brew install kind          # macOS
-# or: go install sigs.k8s.io/kind@latest
+# add Docker's official repo
+sudo dnf -y install dnf-plugins-core
+sudo dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
 
-# kubectl
-brew install kubectl
+# install Docker
+sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
-# Helm (used for some infra components)
-brew install helm
+# start and enable on boot
+sudo systemctl start docker
+sudo systemctl enable docker
 
-# Node.js 20+ (or your service's runtime — see that repo's README)
-```
+# allow your user to run docker without sudo
+sudo usermod -aG docker $USER
+newgrp docker
 
-Verify:
-```bash
+# verify
 docker version
-kind version
+docker run hello-world
+
+-----------------------KIND-----------------------
+cat <<EOF | sudo tee /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
+name=Kubernetes
+baseurl=https://pkgs.k8s.io/core:/stable:/v1.30/rpm/
+enabled=1
+gpgcheck=1
+gpgkey=https://pkgs.k8s.io/core:/stable:/v1.30/rpm/repodata/repomd.xml.key
+EOF
+
+sudo dnf install -y kubectl
+
+# verify
 kubectl version --client
+
+# kind is a single Go binary, no package manager needed
+curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.23.0/kind-linux-amd64
+chmod +x ./kind
+sudo mv ./kind /usr/local/bin/kind
+
+kind version
+
+-----------------------HELM-----------------------
+curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+# verify
+helm version
+
+-----------------------NODEJS-----------------------
+curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
+sudo dnf install -y nodejs
+
+# verify
+node -v
+npm -v
+
+-----------------------GIT-----------------------
+sudo dnf install -y git
+
+# verify
+git --version
+
 ```
 
 ---
@@ -137,63 +178,48 @@ team jump into any repo without relearning structure:
 ```
 gym-<name>-service/
 ├── src/
-│   ├── index.ts              # entrypoint, health check, wires up routes
-│   ├── routes/                # HTTP handlers
+│   ├── index.js                    # entrypoint: bootstraps express, DB, Kafka, routes
+│   ├── config/                     # env config, DB connection, Kafka connection
+│   │   ├── database.js
+│   │   └── kafka.js
+│   ├── models/                     # data layer — one file per sub-domain entity
+│   │   └── example.model.js
+│   ├── views/                      # only if you're server-rendering anything (likely empty/unused for a pure API — most teams skip this folder entirely for APIs, see note below)
+│   ├── controllers/                # request handling — calls services, shapes responses
+│   │   └── example.controller.js
+│   ├── services/                   # business logic — the actual "how", called by controllers
+│   │   └── example.service.js
+│   ├── routes/                     # maps URLs to controllers
+│   │   ├── example.routes.js
+│   │   └── index.js                # combines all routers, mounted in index.js
 │   ├── events/
-│   │   ├── producers.ts       # publishes this service's events
-│   │   └── consumers.ts       # subscribes to events from other services
-│   ├── db/                    # this service's OWN schema/migrations — never shared
-│   └── config/
+│   │   ├── producers/              # one file per event this service publishes
+│   │   │   └── sessionBooked.producer.js
+│   │   └── consumers/              # one file per event this service subscribes to
+│   │       └── paymentSucceeded.consumer.js
+│   ├── middleware/                 # auth check, error handler, request validation
+│   │   ├── auth.middleware.js
+│   │   └── errorHandler.middleware.js
+│   └── db/
+│       └── migrations/             # schema migrations — this service's OWN tables only
 ├── tests/
+│   ├── unit/
+│   └── integration/
 ├── k8s/
-│   └── deployment.yaml         # Deployment + Service + Secret for this service
+│   ├── deployment.yaml     # Pod configurations, replica limits, and container specs
+│   ├── service.yaml        # Service definition mapping internal container ports
+│   └── configmap.yaml      # Non-sensitive runtime environment variables for THIS service
 ├── .github/workflows/ci.yml
 ├── Dockerfile
 ├── .env.example
 └── README.md
 ```
 
-**Non-negotiable rules for every service:**
-
-1. **No service calls another service's database directly.** Ever. If you need data owned by another service, either call its API or consume its published events.
-2. **Every event you consume must be idempotent to process twice.** Check `saga_id`/event ID before acting — brokers redeliver.
-3. **Every event you publish must be defined in `gym-platform-docs` first**, as a versioned JSON schema, before you write the producer code. If the event doesn't exist there yet, add it in a PR to that repo and get it reviewed before building against it.
-4. **`/health` endpoint is mandatory** — the k8s readiness/liveness probes depend on it.
-5. **Secrets never get committed.** Use `.env.example` with placeholder values; real values go in k8s Secrets (local) or AWS Secrets Manager (later, on EKS).
-
 ---
 
-## 6. What to do when implementing a new service — step by step
-
-1. **Read the relevant contract in `gym-platform-docs`** — what events does this service publish, what does it consume, what's its API shape. If it's not documented, write it there first, get a quick review, then proceed.
-2. **Generate the repo from `gym-service-template`.**
-3. **Add `gym-shared-libs` as a dependency** — don't hand-roll a Kafka client or JWT verification; use the shared wrapper so behavior stays consistent across services.
-4. **Build the `/health` endpoint first.** Get it deployed and passing readiness checks in the cluster before writing any business logic — this confirms your Dockerfile, k8s manifest, and CI are all correct early, rather than debugging plumbing and business logic at the same time.
-5. **Implement your own local persistence** (your service's database only).
-6. **Implement consumers for events you depend on**, using the schemas from `gym-platform-docs`. Write them idempotently from the start — don't bolt this on later.
-7. **Implement producers for events you own.**
-8. **If this service participates in a saga** (e.g., booking, membership, payment), write down: the forward action, the compensating action, and what "in progress" state looks like to the rest of the system — before coding it. Put this in the repo's README under a `## Saga participation` heading.
-9. **Write tests**: unit tests for business logic, and at least one integration test that publishes/consumes a real event against a local Kafka (or a testcontainers instance) — not just mocked.
-10. **Open a PR.** CI must pass: lint, build, test, Docker image build.
-11. **Deploy to the local cluster (Mode B above) and manually verify** the event flow with the console producer/consumer trick from §3 before considering it done.
-
----
-
-## 7. Debugging checklist when something doesn't work
+## 6. Debugging checklist when something doesn't work
 
 - `kubectl get pods -A` — is everything actually running?
 - `kubectl logs <pod-name>` — check your service's own logs first
 - `kubectl -n kafka get kafkatopics` — does your topic actually exist?
 - `kubectl describe pod <pod-name>` — usually reveals image pull errors, crash loops, failed probes
-- If a saga seems stuck: check each participating service's logs for the specific `saga_id`, in step order, to find where the chain broke
-
----
-
-## 8. Roadmap note (for planning, not day-one work)
-
-This local setup (kind + Strimzi) is designed to map directly onto AWS EKS later:
-kind → EKS, and Strimzi's Kafka either stays self-managed on EKS or gets swapped
-for AWS MSK. Topic definitions and application code do not need to change either
-way. Don't build anything today that only works locally — always go through
-Kubernetes primitives (Deployments, Services, Secrets) even in dev, so the jump
-to EKS is a config change, not a rewrite.
