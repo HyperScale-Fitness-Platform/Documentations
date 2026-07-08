@@ -1,4 +1,4 @@
-# Gym Platform — Local Environment & Daily Workflow Guide
+# Local Environment & Daily Workflow Guide
 
 Purpose of this document: get every teammate from "empty laptop" to "actively
 building a service that talks to the others through Kafka" — nothing more.
